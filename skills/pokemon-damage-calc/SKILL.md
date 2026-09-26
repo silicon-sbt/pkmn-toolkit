@@ -6,6 +6,9 @@ whenToUse: 需要判断伤害、击杀线、耐久、速度先后手时。
 
 # 伤害计算与速度线
 
+> 路径以**本仓库根**为基准。若本仓库是别的项目的子目录（如 `toolkit/`），
+> 把 `tools/` 读作 `toolkit/tools/`、`teams/` 读作 `toolkit/teams/`。
+
 ## 关键原则：先有队伍文件，再算伤害
 不要凭记忆填 EV/性格/道具。先把双方配置写成 importable 文件（见 pokemon-team-intake），
 再用 `--attacker-file` / `--defender-file` 传入整只配置，这样种族值、性格、EV、

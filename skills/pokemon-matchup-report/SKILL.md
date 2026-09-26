@@ -6,6 +6,9 @@ whenToUse: 用户给出对手队伍，要求针对性分析、找对策、赛前
 
 # 对手针对性分析
 
+> 路径以**本仓库根**为基准。若本仓库是别的项目的子目录（如 `toolkit/`），
+> 把 `tools/` 读作 `toolkit/tools/`、`teams/` 读作 `toolkit/teams/`。
+
 ## 流程
 1. **录入双方队伍** → `teams/me.txt`、`teams/opp.txt`（见 pokemon-team-intake）。
 2. **拉双方资料**：对每只不确定的宝可梦跑 `node tools/pkmn.mjs dex "<名字>"`，

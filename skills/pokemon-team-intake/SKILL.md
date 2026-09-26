@@ -6,6 +6,9 @@ whenToUse: 用户提供或粘贴宝可梦队伍、要求保存/解析/校验队�
 
 # 队伍录入 (Team Intake)
 
+> 路径以**本仓库根**为基准。若本仓库是别的项目的子目录（如 `toolkit/`），
+> 把 `tools/` 读作 `toolkit/tools/`、`teams/` 读作 `toolkit/teams/`。
+
 ## 为什么需要
 所有分析（伤害计算、对局模拟、针对性分析）都以 `teams/*.txt` 的
 Showdown importable 文本为唯一输入格式。先把队伍落盘成文件，后面所有工具才能复用。

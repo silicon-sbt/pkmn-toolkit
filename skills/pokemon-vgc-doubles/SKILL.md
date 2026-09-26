@@ -6,6 +6,9 @@ whenToUse: 用户提到双打、VGC、64 双打、场上有两只宝可梦、顺
 
 # 双打 / VGC
 
+> 路径以**本仓库根**为基准。若本仓库是别的项目的子目录（如 `toolkit/`），
+> 把 `tools/` 读作 `toolkit/tools/`、`teams/` 读作 `toolkit/teams/`。
+
 单打的直觉在双打里经常是错的。这个技能补上双打特有的部分；通用流程见
 `pokemon-damage-calc` 和 `pokemon-battle-sim`。
 
