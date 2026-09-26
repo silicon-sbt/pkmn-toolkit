@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 宝可梦对战"外接大脑" CLI —— 全离线运行，支持中文名
+// 宝可梦对战工具箱 CLI —— 全离线运行，支持中文名
 // dex | move | set | calc | speed | team | sim | formats
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';

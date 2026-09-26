@@ -22,7 +22,7 @@ function loadJson(rel, fallback) {
   const p = join(HERE, '..', rel);
   return existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : fallback;
 }
-// ★ 工具的「根目录」= toolkit/。所有默认路径都必须基于它，不能依赖 cwd ——
+// ★ 工具的「根目录」= 本仓库根。所有默认路径都必须基于它，不能依赖 cwd ——
 //   这些默认值原来写成 'teams/ou-a.txt'，目录重组后从项目根调用就会【静默找不到文件】。
 export const TOOLKIT_ROOT = join(HERE, '..');
 export const tpath = (...p) => join(TOOLKIT_ROOT, ...p);

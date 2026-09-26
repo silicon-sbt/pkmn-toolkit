@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 项目级宝可梦 MCP 服务器（stdio）
 // 类型化参数避免 shell 引号问题（如 "Flutter Mane" 被拆成两个参数），并支持中文名。
-// 通过 dsh.project.yml 的 --patch 叠加挂载，工具名形如 mcp__pokemon__calc
+// 通过 MCP 客户端以 stdio 挂载（DSH / Claude 等的配置片段见 README），工具名形如 mcp__pokemon__calc
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';

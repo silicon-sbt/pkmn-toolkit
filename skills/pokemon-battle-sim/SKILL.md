@@ -6,12 +6,12 @@ whenToUse: 需要验证战术执行、评估两队强弱、复现某个回合序
 
 # 无头对战模拟
 
-真正的外接大脑：不是嘴上推演，而是**让引擎把对局跑出来**。
+不是嘴上推演，而是**让引擎把对局跑出来**。
 
 ## 两队对打的胜率（蒙特卡洛）
 
 ```powershell
-node toolkit/tools/pkmn.mjs sim --p1 toolkit/teams/me.txt --p2 toolkit/teams/opp.txt --n 200
+node tools/pkmn.mjs sim --p1 teams/me.txt --p2 teams/opp.txt --n 200
 ```
 
 输出：p1Wins / p2Wins / undecided / p1WinRate / avgTurns / stalled。
@@ -22,7 +22,7 @@ node toolkit/tools/pkmn.mjs sim --p1 toolkit/teams/me.txt --p2 toolkit/teams/opp
 ## 固定随机种子（可复现）
 
 ```powershell
-node toolkit/tools/pkmn.mjs sim --p1 toolkit/teams/me.txt --p2 toolkit/teams/opp.txt --n 1 --seed 1,2,3,4
+node tools/pkmn.mjs sim --p1 teams/me.txt --p2 teams/opp.txt --n 1 --seed 1,2,3,4
 ```
 
 同一个 seed 完全可复现，方便对比"改了配置后同一局会怎样"。
@@ -31,12 +31,12 @@ node toolkit/tools/pkmn.mjs sim --p1 toolkit/teams/me.txt --p2 toolkit/teams/opp
 引擎里的双方都是**随机出招**，所以：
 - 它衡量的是**队伍强度**，不是**你的操作水平**。
 - 不要拿它当"我这套队能不能赢他"的结论，只能当"这套队的底子如何"。
-- 想验证具体操作线，请让引擎跑到指定回合，然后用 `toolkit/tools/lib.mjs` 的
+- 想验证具体操作线，请让引擎跑到指定回合，然后用 `tools/lib.mjs` 的
   `runBattle` 自行写脚本指定 choice（见下）。
 
 ## 自定义操作线（进阶）
-`toolkit/tools/lib.mjs` 导出了 `decide(battle, side)` 和 `runBattle(...)`。
-要指定某回合的出招，复制 `toolkit/tools/example-scripted-line.mjs` 的写法，把 `decide` 换成你写死的
+`tools/lib.mjs` 导出了 `decide(battle, side)` 和 `runBattle(...)`。
+要指定某回合的出招，复制 `tools/example-scripted-line.mjs` 的写法，把 `decide` 换成你写死的
 choice 字符串（`'move 2'`、`'switch 2'`）即可。
 
 **注意**：`switch N` 里的 N 是**队伍槽位**（第几只），不是场上位置——这是最容易踩的坑。

@@ -41,7 +41,7 @@ whenToUse: 用户要做对战准备、即将开打、或在对战中请求出招
 ### 第 2 步：生成战斗卡
 
 ```powershell
-node toolkit/tools/battlecard.mjs toolkit/teams/我方.txt toolkit/teams/对手.txt [威胁数]
+node tools/battlecard.mjs teams/我方.txt teams/对手.txt [威胁数]
 ```
 
 产出 `battlecard.md`，含三部分：
@@ -60,7 +60,8 @@ node toolkit/tools/battlecard.mjs toolkit/teams/我方.txt toolkit/teams/对手.
 
 - 用户报场面（对面出什么 / 我场上是哪只 / 血量），**直接回出招**。
 - **不调工具**。表已经在上下文里。
-- 只有遇到表里没有的宝可梦时，才说"这个要算一下"，并用 `q.cmd`。
+- 只有遇到表里没有的宝可梦时，才说"这个要算一下"，并跑一次极速查询（`node tools/q.mjs`，
+  或把仓库根下的 `q.cmd` 放进 PATH 后直接敲 `q 雄伟牙 天蝎王`）。
 - 用户赶时间可以让他自己敲：`q 雄伟牙 天蝎王`
 
 ## ★ 只看伤害是不够的

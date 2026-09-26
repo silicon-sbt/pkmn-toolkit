@@ -1,8 +1,8 @@
 # toolkit —— 工具与技能（离线那一半）
 
-纯离线的宝可梦数据 / 伤害 / 对局工具 + DSH 技能。**不依赖 `brain/`**，反过来说 `brain/` 依赖它。
+纯离线的宝可梦数据 / 伤害 / 对局工具 + AI 技能（`SKILL.md`）。**自包含**，不依赖任何外部服务与其它仓库。
 
-统一入口：`node toolkit/tools/pkmn.mjs <子命令>`（Node 24，全离线）。**支持中文名与中文队伍文本。**
+统一入口：`node tools/pkmn.mjs <子命令>`（Node 24，全离线）。**支持中文名与中文队伍文本。**
 
 | 命令 | 用途 |
 |---|---|
@@ -17,7 +17,7 @@
 | `sim --p1 a.txt --p2 b.txt --n 200` | 蒙特卡洛胜率（`--format` 决定单/双打） |
 | `formats [关键词]` | 列出可用对战格式（两个引擎合并，标注来源） |
 
-底层库在 `toolkit/tools/lib.mjs`（`parseImportable` / `loadTeam` / `runBattle` / `zhToEn` / `enToZh` / `tpath`）。
+底层库在 `tools/lib.mjs`（`parseImportable` / `loadTeam` / `runBattle` / `zhToEn` / `enToZh` / `tpath`）。
 需要写自定义逻辑时 import 它，不要在 `pkmn.mjs` 里加。
 
 ## 路径规则（重组后新增，务必遵守）
@@ -26,12 +26,12 @@
 
 ```js
 import { tpath } from './lib.mjs';
-loadTeam(tpath('teams', 'ou-a.txt'));       // ✅ 锚定 toolkit/，从任何 cwd 都成立
+loadTeam(tpath('teams', 'ou-a.txt'));       // ✅ 锚定仓库根，从任何 cwd 都成立
 loadTeam('teams/ou-a.txt');                  // ❌ 依赖 cwd，从项目根调用就找不到
 ```
 
 `lib.mjs` 里的 `loadJson` 已经用 `HERE/..` 定位 `data/`，天然正确。
-`fetch-*.mjs` 是一次性数据生成脚本，需要在 `toolkit/` 目录下运行。
+`fetch-*.mjs` 是一次性数据生成脚本，需要在**仓库根目录**下运行（它们的输出路径是 cwd 相对的）。
 
 ## ⚠️ Champions 的数值系统与主线不同（已实测确认）
 
@@ -77,7 +77,7 @@ Champions 队伍文本里的 `EVs:` 字段是 **Stat Points**，不是主线的�
 Leftovers 官方「吃剩的东西」但大家都说「剩饭」；Jolly 官方「爽朗」而旧译「开朗」。两套都认。
 
 查名顺序：**主源 → 补充源 → 俗称表**。重新生成（需联网，各一次）：
-`node toolkit/tools/fetch-zh-ps.mjs` 和 `node toolkit/tools/fetch-zh.mjs`（在 `toolkit/` 下跑）。
+`node tools/fetch-zh-ps.mjs` 和 `node tools/fetch-zh.mjs`（在仓库根目录下跑）。
 
 **凡是涉及特性/道具/招式效果的结论，都要引用查到的中文描述，不要复述记忆。**
 
@@ -86,7 +86,7 @@ Leftovers 官方「吃剩的东西」但大家都说「剩饭」；Jolly 官方�
 - `tools/` —— CLI 与库
 - `data/` —— 中文表、真实使用率配置（`meta-sets.json`）、RAG 索引
 - `teams/` —— 队伍文件（importable 文本，中英文均可）
-- `skills/` —— **DSH 技能真身在这里**（由根目录 `dsh.project.yml` 的 `customSkillDirs` 指向）
+- `skills/` —— AI 技能（标准 `SKILL.md` 包，任何支持的客户端都能用；接法见 README）
 - `mcp/pokemon-server.mjs` —— 项目级 MCP 服务器
 - `workflows/` —— 工作流模板
 - `docs/` —— 生态调研报告
@@ -104,13 +104,25 @@ Leftovers 官方「吃剩的东西」但大家都说「剩饭」；Jolly 官方�
 - ✅ **已建模**：多重鳞片 Multiscale、幻影防守 Shadow Shield（实测快龙吃暗影球 199-235 → 99-117，正好一半）
 - ❌ **没建模**：画皮 Disguise、结冻头 Ice Face、结实 Sturdy、气势披带 Focus Sash
 - 我一度凭印象说「Multiscale 我们一个都没建模」——**是错的**，差点双重减半。
-  **凡「calc 支不支持 X」，一律先测。** 具体的补法与引擎源码行号见 `brain/AGENTS.md`。
+  **凡「calc 支不支持 X」，一律先写个对拍测出来。**
+- 没建模的四项要自己补，规则（已对过引擎源码）：
+  **结实 / 气势披带** = 满血时被打倒就把该次伤害截成「留 1 血」（多段招不适用：第一段留 1 血、第二段照样打死）；
+  **画皮 / 结冻头** = 该次伤害归 0（画皮再自扣 1/8 最大 HP）。
+  引擎源码：`pokemon-showdown/dist/data/abilities.js` 搜 `sturdy` / `disguise`，`data/items.js` 搜 `focussash`。
 
 **⚠️ 多段招的伤害是【嵌套数组】，不是一维数组**
 - `@smogon/calc` 对多段招返回**每个命中次数一组乱数**：三旋击 `multihit:3` →
   `[[1下×16档],[2下×16档],[3下×16档]]` = 18-22 / 35-42 / 51-61。
 - 直接 `Math.max(...r.damage)` → **NaN**。种子机关枪 / 三旋击 / 鼠数儿 / 水流喷射 / 鳞射都会中招。
-- 统一用 `damageRolls(r)`（在 `brain/harness.mjs` 里；`toolkit` 侧若要算请照抄这段逻辑）。
+- 统一用这个把嵌套压平的辅助函数（`r.damage` 是「数组套数组」时取 `.flat()`）：
+
+  ```js
+  function damageRolls(r) {
+    const dm = r.damage;
+    if (!Array.isArray(dm)) return [dm, dm];
+    return Array.isArray(dm[0]) ? dm.flat() : dm;
+  }
+  ```
 - **多段招的伤害本质是多解 —— 文案必须写「取决于命中几下」，不能当准数。**
 
 **⚠️ 慢的不是文字，是往返**（与 toolkit 无直接关系，但影响所有「帮我看一眼」的请求）
@@ -121,7 +133,7 @@ Leftovers 官方「吃剩的东西」但大家都说「剩饭」；Jolly 官方�
 - **网络请求必须带 `AbortController` 超时**：无超时的 fetch 挂起会拖死整个进程。
 - `@smogon/calc` 的 KO 方法是**小写** `res.kochance()`，不是 `koChance()`。
 - `@pkmn/sim` 的 `Teams` **没有** `parse`，但有 `import`（只吃英文）。
-  本项目用自己的解析器以支持中文，见 `tools/lib.mjs`。
+  本仓库用自己的解析器以支持中文，见 `tools/lib.mjs`。
 - `Battle` 在 `setPlayer` 第二方后**自动 start**，再调 `start()` 会抛错。
 - 出招**一律用 `battle.makeChoices()`**（引擎自带随机 AI），不要自己拼 choice 字符串。
 
@@ -132,7 +144,7 @@ Leftovers 官方「吃剩的东西」但大家都说「剩饭」；Jolly 官方�
 
 **格式**
 - `gen9ou` 是 Lv100 格式，Lv50 队伍校验会报错；VGC 队伍用 `gen9vgc2025regi` / `gen9vgc2024regg`，且**至少 4 只**。
-- 可用格式用 `node toolkit/tools/pkmn.mjs formats` 确认；格式 id 写错不如不写。
+- 可用格式用 `node tools/pkmn.mjs formats` 确认；格式 id 写错不如不写。
 
 **中文**
 - 两源译名可能不同（PS 用 `归天之翼`、PokeAPI 用 `死亡之翼`），**都保留、都能查**；新增俗称写进 `data/zh-aliases.json`。

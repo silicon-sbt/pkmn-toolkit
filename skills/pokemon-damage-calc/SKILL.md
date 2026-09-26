@@ -15,10 +15,10 @@ whenToUse: 需要判断伤害、击杀线、耐久、速度先后手时。
 
 ```powershell
 # 完整配置（推荐）：文件里第一只宝可梦即当作攻/守方
-node toolkit/tools/pkmn.mjs calc --attacker-file toolkit/teams/me.txt --defender-file toolkit/teams/opp.txt --move "Earthquake"
+node tools/pkmn.mjs calc --attacker-file teams/me.txt --defender-file teams/opp.txt --move "Earthquake"
 
 # 快速估算：只给物种，用默认配置
-node toolkit/tools/pkmn.mjs calc --attacker "Garchomp" --defender "Flutter Mane" --move "Earthquake"
+node tools/pkmn.mjs calc --attacker "Garchomp" --defender "Flutter Mane" --move "Earthquake"
 ```
 
 输出包含：可读描述、防守方血量、伤害区间、百分比、**koChance（几确）**、16 个伤害乱数。
@@ -29,7 +29,7 @@ node toolkit/tools/pkmn.mjs calc --attacker "Garchomp" --defender "Flutter Mane"
 ## 速度线
 
 ```powershell
-node toolkit/tools/pkmn.mjs speed --attacker "Garchomp" --defender "Flutter Mane" --scarf p1 --tailwind p2 --para p1
+node tools/pkmn.mjs speed --attacker "Garchomp" --defender "Flutter Mane" --scarf p1 --tailwind p2 --para p1
 ```
 
 - 基准是 **Lv50 / 满速 EV / Jolly 或 Timid**，与实际队伍不符时用
@@ -42,9 +42,9 @@ node toolkit/tools/pkmn.mjs speed --attacker "Garchomp" --defender "Flutter Mane
 伤害算错最常见的原因不是算术，而是**特性或道具的效果记错了**。
 
 ```powershell
-node toolkit/tools/pkmn.mjs ability "威吓"      # 中文描述，含免疫该效果的特性列表
-node toolkit/tools/pkmn.mjs item "突击背心"     # 中文描述
-node toolkit/tools/pkmn.mjs move "地震"         # 招式的 shortDescZh / descZh
+node tools/pkmn.mjs ability "威吓"      # 中文描述，含免疫该效果的特性列表
+node tools/pkmn.mjs item "突击背心"     # 中文描述
+node tools/pkmn.mjs move "地震"         # 招式的 shortDescZh / descZh
 ```
 
 中文名、官方译名、社区俗称都能查（`剩饭` = `吃剩的东西` = Leftovers）。

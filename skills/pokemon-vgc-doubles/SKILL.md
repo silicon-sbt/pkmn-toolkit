@@ -12,7 +12,7 @@ whenToUse: 用户提到双打、VGC、64 双打、场上有两只宝可梦、顺
 ## 1. 伤害计算必须开双打场地
 
 ```powershell
-node toolkit/tools/pkmn.mjs calc --attacker-file toolkit/teams/vgc-a.txt --defender "振翼发" --move "地震" --doubles
+node tools/pkmn.mjs calc --attacker-file teams/vgc-a.txt --defender "振翼发" --move "地震" --doubles
 ```
 
 `--doubles` 会把**扩散招式**（地震、热风、魔法闪耀、大声咆哮…）按 **0.75 倍**计算。
@@ -29,13 +29,13 @@ node toolkit/tools/pkmn.mjs calc --attacker-file toolkit/teams/vgc-a.txt --defen
 - `move 1 -1` = 打**自己队友**
 - **扩散招式（地震/热风）和自身招式（守住/剑舞）不能带目标**，带了会被拒绝
 
-用 `toolkit/tools/example-scripted-line.mjs` 跑指定操作线时按这个格式写。
+用 `tools/example-scripted-line.mjs` 跑指定操作线时按这个格式写。
 日常的 `sim` 不需要手动指定目标，引擎会自动处理。
 
 ## 3. 速度博弈和单打不同
 
 ```powershell
-node toolkit/tools/pkmn.mjs speed --attacker "振翼发" --defender "铁臂膀" --tailwind p1
+node tools/pkmn.mjs speed --attacker "振翼发" --defender "铁臂膀" --tailwind p1
 ```
 
 - **顺风** `--tailwind p1`：×2，持续 4 回合，是双打控速的核心。
@@ -48,7 +48,7 @@ node toolkit/tools/pkmn.mjs speed --attacker "振翼发" --defender "铁臂膀" 
 
 ```powershell
 # VGC 队伍必须至少 4 只（登记 6 只、出场 4 只）
-node toolkit/tools/pkmn.mjs team toolkit/teams/vgc-a.txt --format gen9vgc2025regi
+node tools/pkmn.mjs team teams/vgc-a.txt --format gen9vgc2025regi
 ```
 
 - **当前规则是 Champions（VGC 2026）**，只有 `pokemon-showdown` 引擎能跑：
@@ -58,17 +58,17 @@ node toolkit/tools/pkmn.mjs team toolkit/teams/vgc-a.txt --format gen9vgc2025reg
 - 旧规则（仍在 @pkmn/sim）：`gen9vgc2025regi`（2025 Reg I）、`gen9vgc2024regg`、
   `gen9doublescustomgame`。
 - **别把 `gen9vgc2025regi` 当成当前规则** —— 输出里的 `engine` 字段会告诉你用的是哪个引擎。
-- 列格式：`node toolkit/tools/pkmn.mjs formats vgc` / `formats champions`。
+- 列格式：`node tools/pkmn.mjs formats vgc` / `formats champions`。
 - **VGC 队伍等级是 50 级**，不要用 `gen9ou` 校验（那是 Lv100 格式，会报错）。
-- 用 `node toolkit/tools/pkmn.mjs formats vgc` 列出全部可用 VGC 格式。
+- 用 `node tools/pkmn.mjs formats vgc` 列出全部可用 VGC 格式。
 
 ## 5. 双打模拟
 
 ```powershell
 # 当前规则（Champions VGC 2026）
-node toolkit/tools/pkmn.mjs sim --p1 toolkit/teams/vgc-a.txt --p2 toolkit/teams/vgc-b.txt --n 100 --format gen9championsdoublescustomgame
+node tools/pkmn.mjs sim --p1 teams/vgc-a.txt --p2 teams/vgc-b.txt --n 100 --format gen9championsdoublescustomgame
 # 旧规则
-node toolkit/tools/pkmn.mjs sim --p1 toolkit/teams/vgc-a.txt --p2 toolkit/teams/vgc-b.txt --n 100 --format gen9doublescustomgame
+node tools/pkmn.mjs sim --p1 teams/vgc-a.txt --p2 teams/vgc-b.txt --n 100 --format gen9doublescustomgame
 ```
 
 - 出招由**引擎自带 AI** 处理（随机），双打目标、换人、出场数都已正确处理。

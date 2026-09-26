@@ -143,7 +143,8 @@ $ node tools/pkmn.mjs ability "威吓"
 
 ### 技能
 
-`skills/` 下是标准的 `SKILL.md` 包，任何支持该格式的 AI 客户端都能用（DSH / Claude Code 等）：
+`skills/` 下是标准的 `SKILL.md` 包，任何支持该格式的 AI 客户端都能用（DSH / Claude Code 等）。
+技能里的命令都以**仓库根目录**为工作目录。
 
 | 技能 | 什么时候用 |
 |---|---|

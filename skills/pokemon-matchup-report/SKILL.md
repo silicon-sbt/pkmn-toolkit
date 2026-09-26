@@ -7,11 +7,11 @@ whenToUse: 用户给出对手队伍，要求针对性分析、找对策、赛前
 # 对手针对性分析
 
 ## 流程
-1. **录入双方队伍** → `toolkit/teams/me.txt`、`toolkit/teams/opp.txt`（见 pokemon-team-intake）。
-2. **拉双方资料**：对每只不确定的宝可梦跑 `node toolkit/tools/pkmn.mjs dex "<名字>"`，
+1. **录入双方队伍** → `teams/me.txt`、`teams/opp.txt`（见 pokemon-team-intake）。
+2. **拉双方资料**：对每只不确定的宝可梦跑 `node tools/pkmn.mjs dex "<名字>"`，
    拿到属性、种族值、特性（含中文名）。
 3. **查关键特性与道具的效果**（别凭记忆！）：
-   `node toolkit/tools/pkmn.mjs ability "<特性>"` / `node toolkit/tools/pkmn.mjs item "<道具>"`。
+   `node tools/pkmn.mjs ability "<特性>"` / `node tools/pkmn.mjs item "<道具>"`。
    这两条命令返回**中文效果描述**，是判断"这只能不能挡、道具吃不吃得住"的依据。
    例：Multiscale 让满血时伤害减半、Assault Vest 提特防但禁用变化招式——
    记错任何一条，整份报告就废了。
