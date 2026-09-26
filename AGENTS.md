@@ -1,0 +1,140 @@
+# toolkit —— 工具与技能（离线那一半）
+
+纯离线的宝可梦数据 / 伤害 / 对局工具 + DSH 技能。**不依赖 `brain/`**，反过来说 `brain/` 依赖它。
+
+统一入口：`node toolkit/tools/pkmn.mjs <子命令>`（Node 24，全离线）。**支持中文名与中文队伍文本。**
+
+| 命令 | 用途 |
+|---|---|
+| `dex <名称>` | 种族值 / 属性 / 特性（中英文皆可，如 `耿鬼`） |
+| `move <名称>` | 招式威力/属性/分类/PP/优先度 + 中文效果描述（如 `地震`） |
+| `ability <名称>` | 特性效果（**中文描述**，如 `威吓`） |
+| `item <名称>` | 对战道具效果（**中文描述**，如 `剩饭`） |
+| `set <队伍文件>` | 解析 importable 队伍 |
+| `calc --attacker-file A --defender-file B --move M` | 伤害 + 击杀线（双打加 `--doubles`） |
+| `speed --attacker X --defender Y` | 速度线对比 |
+| `team <队伍文件> --format <格式>` | 队伍合法性校验（**双校验器**，见下） |
+| `sim --p1 a.txt --p2 b.txt --n 200` | 蒙特卡洛胜率（`--format` 决定单/双打） |
+| `formats [关键词]` | 列出可用对战格式（两个引擎合并，标注来源） |
+
+底层库在 `toolkit/tools/lib.mjs`（`parseImportable` / `loadTeam` / `runBattle` / `zhToEn` / `enToZh` / `tpath`）。
+需要写自定义逻辑时 import 它，不要在 `pkmn.mjs` 里加。
+
+## 路径规则（重组后新增，务必遵守）
+
+**所有默认路径必须走 `tpath()`，不要写裸相对路径。**
+
+```js
+import { tpath } from './lib.mjs';
+loadTeam(tpath('teams', 'ou-a.txt'));       // ✅ 锚定 toolkit/，从任何 cwd 都成立
+loadTeam('teams/ou-a.txt');                  // ❌ 依赖 cwd，从项目根调用就找不到
+```
+
+`lib.mjs` 里的 `loadJson` 已经用 `HERE/..` 定位 `data/`，天然正确。
+`fetch-*.mjs` 是一次性数据生成脚本，需要在 `toolkit/` 目录下运行。
+
+## ⚠️ Champions 的数值系统与主线不同（已实测确认）
+
+Champions 队伍文本里的 `EVs:` 字段是 **Stat Points**，不是主线的努力值：
+
+| | 主线 | Champions |
+|---|---|---|
+| 单项上限 | 252 EV | **32 点** |
+| 总上限 | 508 EV | **66 点** |
+| IV | 0–31 可调 | **固定 31**；写 `IVs: 0` 会被校验直接拒绝 |
+
+**换算（实测验证）**：`evs=32` 与主线 `252EV/31IV` 数值**完全一致** —— **1 点 ≈ 8 点努力值**（第 1 点 ≈ 4）。
+引擎内部用 `max(2*点数-1, 0)` 充当主线的 `floor(EV/4)`；喂 `@smogon/calc` 时反过来：
+`主线EV = max(8*点数-4, 0)`。
+
+**重大坑**：外部导出的 Champions 队伍**经常把 Stat Points 丢成全 0**。全 0 是**合法的**（校验会通过！），
+但代表**完全没投入**，据此算出的伤害偏低约 15–20%。**看到全 0 必须先问用户真实分配，不要直接开算。**
+
+## 双引擎（重要）
+
+| 引擎 | 格式数 | Champions / VGC 2026 | 说明 |
+|---|---|---|---|
+| `@pkmn/sim` | 201 | **0** ❌ | 轻量纯 ESM，默认引擎 |
+| `pokemon-showdown` | 334 | **15** ✅ | 官方完整包，CJS |
+
+**路由**：格式 id 含 `champions` 自动走 `pokemon-showdown`，其余走 `@pkmn/sim`。
+`--engine sim|showdown|auto` 可强制，输出里的 `engine` 字段说明实际用了哪个。
+
+当前 VGC 2026（Reg M-C）只有 `pokemon-showdown` 能跑（`gen9championsvgc2026regmb` 等）。
+**别拿 `@pkmn/sim` 的 `gen9vgc2025regi` 冒充当前规则。**
+
+**多词英文名必须加引号**：`--defender "Flutter Mane"`。中文名不用。
+
+## 中文支持（两个离线数据源互补）
+
+**主源 `data/zh-ps.json`** —— PS 官方中文（`fetch-zh-ps.mjs`）：键就是 Showdown ID，与 `@pkmn/dex` 同构，
+**自带中文描述**（`shortDesc`/`desc`）。覆盖：宝可梦 1559 / 招式 953 / 特性 320 / 道具 583。
+
+**补充源 `data/zh-names.json`** —— PokeAPI 官方简中译名（`fetch-zh.mjs`）。
+与主源在 59 条上译名不同，**两套都保留**（`归天之翼`/PS vs `死亡之翼`/PokeAPI）。
+
+**俗称表 `data/zh-aliases.json`** —— 社区俗称/旧译（人工维护，优先级最低）。
+Leftovers 官方「吃剩的东西」但大家都说「剩饭」；Jolly 官方「爽朗」而旧译「开朗」。两套都认。
+
+查名顺序：**主源 → 补充源 → 俗称表**。重新生成（需联网，各一次）：
+`node toolkit/tools/fetch-zh-ps.mjs` 和 `node toolkit/tools/fetch-zh.mjs`（在 `toolkit/` 下跑）。
+
+**凡是涉及特性/道具/招式效果的结论，都要引用查到的中文描述，不要复述记忆。**
+
+## 目录
+
+- `tools/` —— CLI 与库
+- `data/` —— 中文表、真实使用率配置（`meta-sets.json`）、RAG 索引
+- `teams/` —— 队伍文件（importable 文本，中英文均可）
+- `skills/` —— **DSH 技能真身在这里**（由根目录 `dsh.project.yml` 的 `customSkillDirs` 指向）
+- `mcp/pokemon-server.mjs` —— 项目级 MCP 服务器
+- `workflows/` —— 工作流模板
+- `docs/` —— 生态调研报告
+
+## 已知坑（全部实际踩过）
+
+**⚠️ 校验必须用两个校验器（最重要的一条）**
+- `pokemon-showdown` 的 `TeamValidator` **比 `@pkmn/sim` 的更严格**，会执行 sim 漏掉的规则。
+  实测：Slowking-Galar 的 `Scald` 学习表是 `["8M"]`（仅 Gen8 来源），
+  **sim 判「通过」，PS 判 "can't be transferred from Gen 8 to 9"**。
+- 因此 `pkmn.mjs team` **两个都跑**，输出 `problems` / `strictProblems` / `verified`。
+  **只有 `verified: true` 才算真的合法。** 只信一个校验器会给**假的 OK**。
+
+**⚠️ `@smogon/calc` 建了什么、没建什么 —— 必须先写对拍测出来，再决定要不要自己补**
+- ✅ **已建模**：多重鳞片 Multiscale、幻影防守 Shadow Shield（实测快龙吃暗影球 199-235 → 99-117，正好一半）
+- ❌ **没建模**：画皮 Disguise、结冻头 Ice Face、结实 Sturdy、气势披带 Focus Sash
+- 我一度凭印象说「Multiscale 我们一个都没建模」——**是错的**，差点双重减半。
+  **凡「calc 支不支持 X」，一律先测。** 具体的补法与引擎源码行号见 `brain/AGENTS.md`。
+
+**⚠️ 多段招的伤害是【嵌套数组】，不是一维数组**
+- `@smogon/calc` 对多段招返回**每个命中次数一组乱数**：三旋击 `multihit:3` →
+  `[[1下×16档],[2下×16档],[3下×16档]]` = 18-22 / 35-42 / 51-61。
+- 直接 `Math.max(...r.damage)` → **NaN**。种子机关枪 / 三旋击 / 鼠数儿 / 水流喷射 / 鳞射都会中招。
+- 统一用 `damageRolls(r)`（在 `brain/harness.mjs` 里；`toolkit` 侧若要算请照抄这段逻辑）。
+- **多段招的伤害本质是多解 —— 文案必须写「取决于命中几下」，不能当准数。**
+
+**⚠️ 慢的不是文字，是往返**（与 toolkit 无直接关系，但影响所有「帮我看一眼」的请求）
+- 实测每回合固定消耗 15–20 秒往返。**做对战辅助时，一次给决策树，不要一回合给一手。**
+
+**引擎 / API**
+- `switch N` 和 `move N` 里的 N 是**队伍槽位**，不是场上位置。
+- **网络请求必须带 `AbortController` 超时**：无超时的 fetch 挂起会拖死整个进程。
+- `@smogon/calc` 的 KO 方法是**小写** `res.kochance()`，不是 `koChance()`。
+- `@pkmn/sim` 的 `Teams` **没有** `parse`，但有 `import`（只吃英文）。
+  本项目用自己的解析器以支持中文，见 `tools/lib.mjs`。
+- `Battle` 在 `setPlayer` 第二方后**自动 start**，再调 `start()` 会抛错。
+- 出招**一律用 `battle.makeChoices()`**（引擎自带随机 AI），不要自己拼 choice 字符串。
+
+**双打专属**
+- **单体招式必须带目标**：`move 1 1`（打对方 1 号位）。扩散/自身招式**不能**带目标。
+- `battle.choose()` 失败时**返回 false 而不抛异常** —— 不检查返回值会静默空转成死循环。
+- 扩散招式在双打是 **0.75 倍**，`calc` 要加 `--doubles`。
+
+**格式**
+- `gen9ou` 是 Lv100 格式，Lv50 队伍校验会报错；VGC 队伍用 `gen9vgc2025regi` / `gen9vgc2024regg`，且**至少 4 只**。
+- 可用格式用 `node toolkit/tools/pkmn.mjs formats` 确认；格式 id 写错不如不写。
+
+**中文**
+- 两源译名可能不同（PS 用 `归天之翼`、PokeAPI 用 `死亡之翼`），**都保留、都能查**；新增俗称写进 `data/zh-aliases.json`。
+- PS 主源键是 Showdown ID，形态名带后缀（`谢米・陆上`）；查基础形态用不带后缀的名字。
+- 未收录的名字会原样透传导致查不到 —— 查不到时先怀疑是俗称/新旧译法问题，而不是数据缺失。
