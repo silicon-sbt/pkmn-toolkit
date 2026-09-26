@@ -19,6 +19,8 @@
 | `speed --attacker X --defender Y` | 速度线对比 |
 | `team <队伍文件> --format <格式>` | 队伍合法性校验（**双校验器**，见下） |
 | `sim --p1 a.txt --p2 b.txt --n 200` | 蒙特卡洛胜率（`--format` 决定单/双打） |
+| `speed` 修正 | 配置里的讲究围巾/天气特性**自动算**；另有 `--scarf/--tailwind/--para/--weather/--booster/--boost-pN` |
+| `node tools/_verify-core.mjs` | 核心库自检（多段招二维数组 + 速度修正，23 项断言） |
 | `formats [关键词]` | 列出可用对战格式（两个引擎合并，标注来源） |
 
 底层库在 `tools/lib.mjs`（`parseImportable` / `loadTeam` / `runBattle` / `zhToEn` / `enToZh` / `tpath`）。
@@ -114,20 +116,32 @@ Leftovers 官方「吃剩的东西」但大家都说「剩饭」；Jolly 官方�
   **画皮 / 结冻头** = 该次伤害归 0（画皮再自扣 1/8 最大 HP）。
   引擎源码：`pokemon-showdown/dist/data/abilities.js` 搜 `sturdy` / `disguise`，`data/items.js` 搜 `focussash`。
 
-**⚠️ 多段招的伤害是【嵌套数组】，不是一维数组**
-- `@smogon/calc` 对多段招返回**每个命中次数一组乱数**：三旋击 `multihit:3` →
-  `[[1下×16档],[2下×16档],[3下×16档]]` = 18-22 / 35-42 / 51-61。
-- 直接 `Math.max(...r.damage)` → **NaN**。种子机关枪 / 三旋击 / 鼠数儿 / 水流喷射 / 鳞射都会中招。
-- 统一用这个把嵌套压平的辅助函数（`r.damage` 是「数组套数组」时取 `.flat()`）：
+**⚠️ 多段招的伤害是【二维数组】，而且平铺会静默算错**
+- `@smogon/calc` 0.12 对多段招返回的**外层是【第几下】**、内层是这一下的 16 档乱数。
+  实测：种子机关枪 3×16、三旋击 3×16（每下递增 20-24 / 39-46 / 57-68）、鼠数儿 10×16。
+  **总伤害 = 各下逐档相加**（三旋击 116-138 正好是 desc 里的总区间）。
+- 直接 `Math.max(...r.damage)` → **NaN**。
+- ⚠️ **更阴的是 `.flat()`：不报错，但语义是错的** —— 给你的是【单下】的区间，
+  不是总伤害。种子机关枪会被报成 56-68，而真实总伤害是 **168-204**（差 3 倍）。
+  `tools/pkmn.mjs` 和 `mcp/pokemon-server.mjs` 里都真出现过（报 NaN），
+  `brain/harness.mjs` 里是 `.flat()` 版本（数字偏小、几确全错）。
+- 统一用 `lib.mjs` 导出的这个（**返回 total 和 perHit 两个口径，用的人自己选，别猜**）：
 
   ```js
-  function damageRolls(r) {
-    const dm = r.damage;
-    if (!Array.isArray(dm)) return [dm, dm];
-    return Array.isArray(dm[0]) ? dm.flat() : dm;
-  }
+  import { damageRolls } from './lib.mjs';
+  const { total, perHit, multiHit, hits } = damageRolls(res);
+  // total = 合计（判几确、判能不能秒，用这个）
+  // perHit = 单下（只在需要说「每下打多少」时用）
   ```
-- **多段招的伤害本质是多解 —— 文案必须写「取决于命中几下」，不能当准数。**
+- **多段招的伤害本质是多解 —— 文案必须写「按 N 下算的合计；命中数可变时是估算」，不能当准数。**
+
+**⚠️ 速度：`Pokemon.stats.spe` 不含道具 / 特性 / 能力等级 / 异常状态（实测）**
+- 讲究围巾、速度 +2、麻痹 —— **三者都不改变 `stats.spe`**；0.12 也**没有导出 `getFinalSpeed`**。
+- 所以必须走 `lib.mjs` 的 `finalSpeed(pokemon, opts)`；它自己读 `pokemon.item` / `pokemon.ability`，
+  再叠加 `opts`（`weather` / `tailwind` / `para` / `boost` / `booster`）。
+- 踩过的坑：队文件里明明写着 `@ Choice Scarf`，`speed` 却按 309 报，
+  还回了句「Iron Valiant 更快」—— **围巾土地云其实是 463，它更快**。数字就在手里却没用。
+- 自检：`node tools/_verify-core.mjs`（多段招对拍 desc + 速度修正，23 项断言，不联网）。
 
 **⚠️ 慢的不是文字，是往返**（与 toolkit 无直接关系，但影响所有「帮我看一眼」的请求）
 - 实测每回合固定消耗 15–20 秒往返。**做对战辅助时，一次给决策树，不要一回合给一手。**

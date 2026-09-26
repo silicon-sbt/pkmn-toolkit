@@ -3,7 +3,7 @@
 // dex | move | set | calc | speed | team | sim | formats
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { parseImportable, loadTeam, runBattle, zhToEn, enToZh, zhInfo } from './lib.mjs';
+import { parseImportable, loadTeam, runBattle, zhToEn, enToZh, zhInfo, damageRolls, finalSpeed } from './lib.mjs';
 import { resolveEngine, listFormats, loadShowdown } from './engine.mjs';
 
 const argv = process.argv.slice(2);
@@ -18,6 +18,9 @@ const { values, positionals } = parseArgs({
     n: { type: 'string', default: '1' }, seed: { type: 'string' },
     field: { type: 'string' }, doubles: { type: 'boolean', default: false },
     scarf: { type: 'string' }, tailwind: { type: 'string' }, para: { type: 'string' },
+    // 速度修正：配置里本来就有的（围巾/天气特性）现在自动读，这几个是【额外假设】
+    weather: { type: 'string' }, booster: { type: 'string' },
+    'boost-p1': { type: 'string' }, 'boost-p2': { type: 'string' },
     engine: { type: 'string', default: 'auto' },
     zh: { type: 'boolean', default: false },
   },
@@ -92,15 +95,24 @@ if (cmd === 'dex') {
   const moveEn = zhToEn('moves', values.move);
   const f = new Field({ gameType: isDoubles() ? 'Doubles' : 'Singles' });
   const res = calculate(g, atk, def, new Move(g, moveEn), f);
-  const dmg = Array.isArray(res.damage) ? res.damage : [res.damage, res.damage];
+  // ★ 多段招的 damage 是二维数组（外层=第几下）。直接 Math.max 会 NaN，
+  //   而 flat() 会静默给你【单下】的区间（种子机关枪被报成 72-86，真实是 216-258）。
+  const { total, perHit, multiHit, hits, groups } = damageRolls(res);
   const hp = def.stats.hp;
   const ko = res.kochance();
+  const pc = (x) => (x / hp * 100).toFixed(1) + '%';
   out({
     desc: res.desc(), gameType: isDoubles() ? 'Doubles' : 'Singles',
     attackerHp: atk.stats.hp, defenderHp: hp,
-    damage: [Math.min(...dmg), Math.max(...dmg)],
-    percent: [(Math.min(...dmg) / hp * 100).toFixed(1) + '%', (Math.max(...dmg) / hp * 100).toFixed(1) + '%'],
-    koChance: ko.text || (ko.chance + '%'), rolls: dmg,
+    damage: total,
+    percent: [pc(total[0]), pc(total[1])],
+    koChance: ko.text || (ko.chance + '%'),
+    // 多段招另给口径：总伤害 vs 单下。别把单下当总伤害用。
+    ...(multiHit ? { multiHit: true, hits, perHitDamage: perHit,
+      perHitPercent: [pc(perHit[0]), pc(perHit[1])],
+      note: '多段招：damage/percent 是【' + hits + ' 下的合计】；命中数本身可变时（种子机关枪 2-5 下）这也是估算',
+      byHit: groups } : {}),
+    rolls: total,
   });
 } else if (cmd === 'speed') {
   const { Generations } = await import('@smogon/calc');
@@ -108,15 +120,22 @@ if (cmd === 'dex') {
   const mk = (name, file) => toCalcPokemon({ name, file });
   const a = await mk(values.attacker, values['attacker-file']);
   const b = await mk(values.defender, values['defender-file']);
-  const mod = (p, tag) => {
-    let s = p.stats.spe; const notes = [];
-    if (values.scarf && values.scarf.split(',').includes(tag)) { s = Math.floor(s * 1.5); notes.push('围巾×1.5'); }
-    if (values.tailwind && values.tailwind.split(',').includes(tag)) { s *= 2; notes.push('顺风×2'); }
-    if (values.para && values.para.split(',').includes(tag)) { s = Math.floor(s * 0.5); notes.push('麻痹×0.5'); }
-    return { species: p.name, base: p.stats.spe, effective: s, mods: notes };
-  };
-  const A = mod(a, 'p1'), B = mod(b, 'p2');
-  out({ p1: A, p2: B, faster: A.effective > B.effective ? 'p1' : B.effective > A.effective ? 'p2' : 'tie' });
+  // ★ 修正来源【三处都要看】：①配置里本来就有的道具/特性 ②命令行开关 ③能力等级。
+  //   以前只认命令行开关，于是队文件里写着 @ Choice Scarf 也被无视 ——
+  //   实测报出「Iron Valiant 更快」而围巾土地云其实是 463 > 364，直接答反。
+  const flag = (v, tag) => !!(v && String(v).split(',').includes(tag));
+  const mod = (p, tag, boost) => finalSpeed(p, {
+    tailwind: flag(values.tailwind, tag), para: flag(values.para, tag),
+    weather: values.weather || null, boost: boost || 0,
+    // --scarf 仍然保留：用于「对手可能是围巾」这类【不属于本配置】的假设
+    item: flag(values.scarf, tag) ? 'Choice Scarf' : undefined,
+    booster: flag(values.booster, tag),
+  });
+  const boostOf = (v) => Number(v || 0);
+  const A = mod(a, 'p1', boostOf(values['boost-p1'])), B = mod(b, 'p2', boostOf(values['boost-p2']));
+  out({ p1: A, p2: B,
+    faster: A.effective > B.effective ? 'p1' : B.effective > A.effective ? 'p2' : 'tie',
+    note: 'effective 已含配置里的讲究围巾/天气特性；opts 里含 --scarf/--tailwind/--para/--weather/--booster/--boost-pN' });
 } else if (cmd === 'team') {
   const team = loadTeam(positionals[0]);
   const { sim, name } = await resolveEngine({ format: values.format, engine: values.engine });

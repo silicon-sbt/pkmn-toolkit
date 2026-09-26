@@ -9,7 +9,7 @@
 //     实战中我曾说"你更快"结果被影子偷袭秒杀，就是因为它埋在分类里没看到。
 //  2. 对手配置优先从 data/meta-sets.json（Smogon 真实使用率）查，不再靠猜。
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { parseImportable, zhToEn, zhInfo, tpath } from './lib.mjs';
+import { parseImportable, zhToEn, zhInfo, tpath, finalSpeed } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const myFile = args[0] || tpath('teams', 'ou-a.txt');
@@ -138,6 +138,53 @@ for (const o of opp) {
   if (flag) imm.push('  ' + zh(o.species) + ' 特性【' + ab + '】-> ' + flag);
 }
 if (imm.length) imm.forEach(x => L.push(x)); else L.push('  (未发现免疫项)');
+
+// ================= 速度顺序（此前整张卡里没有） =================
+// 实测教训：2026-09-26 的一局，面板说「冰冻光束 可一击必杀」，可 Inteleon 372 > Kyurem 317，
+// 它先手把 Kyurem 打死 —— 那一手根本打不出去。同一局另一只也这么丢的。
+// 战斗卡原来只有「先制威胁」，【一行速度顺序都没有】—— 而速度比先制更常决定生死。
+L.push('');
+L.push('## 速度顺序  ——【它比你快，你这一手就打不出去，跟伤害多少无关】');
+const speOf = (s) => finalSpeed(mk(s));
+const mySpe = my.map(a => ({ who: zh(a.species), ...speOf(a) })).sort((a, b) => b.effective - a.effective);
+const oppSpe = opp.map(o => ({ who: zh(o.species), ...speOf(o) })).sort((a, b) => b.effective - a.effective);
+const fmtSpe = (x) => x.who + ' ' + x.effective + (x.mods.length ? '（' + x.mods.join('/') + '）' : '');
+L.push('  我方: ' + mySpe.map(fmtSpe).join('  '));
+L.push('  对方: ' + oppSpe.map(fmtSpe).join('  '));
+const slow = [];
+for (const a of mySpe) {
+  const faster = oppSpe.filter(o => o.effective > a.effective);
+  if (faster.length) slow.push('  ' + a.who + ' ' + a.effective + ' 会被先手: ' + faster.map(f => f.who + ' ' + f.effective).join('、'));
+}
+if (slow.length) slow.forEach(x => L.push('⚠️' + x)); else L.push('  ✅ 我方全员速度快过对方（先制招另算，见上）');
+L.push('  > 速度已含【配置里写着的讲究围巾 / 天气特性】。驱动能量、顺风、麻痹、能力等级要你自己补。');
+
+// ================= 钉子价值 =================
+// 和 brain 那侧同一套算法：隐形岩 = 最大血量的 1/8 × 岩石相性倍率。
+// ⚠️ @pkmn/dex 的 damageTaken 是【从防守方视角】记的：0=中性 1=弱点(2x) 2=抵抗(0.5x) 3=免疫 4=双重抵抗。
+const MULT = { 0: 1, 1: 2, 2: 0.5, 3: 0, 4: 0.25 };
+const rockMult = (sp) => {
+  const s = Dex.species.get(sp);
+  if (!s.exists) return null;
+  let m = 1;
+  for (const t of s.types) m *= (MULT[Dex.types.get(t).damageTaken['Rock']] ?? 1);
+  return m;
+};
+const myRockers = my.filter(a => (a.moves || []).some(m => Dex.moves.get(m).sideCondition === 'stealthrock'));
+L.push('');
+L.push('## 钉子价值' + (myRockers.length ? '（' + myRockers.map(a => zh(a.species)).join('/') + ' 会隐形岩）' : ''));
+if (!myRockers.length) {
+  L.push('  ⚠️ 我方【没有任何人会隐形岩】—— 这套队没有钉子的主动权');
+} else {
+  const rows = opp.map(o => ({ sp: o.species, pct: (rockMult(o.species) ?? 1) / 8 * 100 })).sort((a, b) => b.pct - a.pct);
+  const heavy = rows.filter(r => r.pct >= 25).length;
+  const avg = rows.reduce((s, r) => s + r.pct, 0) / rows.length;
+  L.push('  对方每只吃隐形岩: ' + rows.map(r => zh(r.sp) + ' ' +
+    (Number.isInteger(r.pct) ? r.pct.toFixed(0) : r.pct.toFixed(1)) + '%').join('  '));
+  L.push('  掉 25% 以上的: ' + heavy + ' 只      平均每次换人掉 ' + avg.toFixed(1) + '%');
+  L.push(heavy >= 2 ? '  → 值得撒：对面每次换人都要付这份钱'
+    : '  ⚠️ 对面这几只不太怕岩石，撒钉收益低 —— 别为了「该撒钉」而撒');
+}
 
 // ================= A. 伤害表 =================
 L.push('');

@@ -5,7 +5,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { parseImportable, loadTeam, runBattle, zhToEn, enToZh, zhInfo } from '../tools/lib.mjs';
+import { parseImportable, loadTeam, runBattle, zhToEn, enToZh, zhInfo, damageRolls, finalSpeed } from '../tools/lib.mjs';
 import { resolveEngine } from '../tools/engine.mjs';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -38,14 +38,19 @@ async function calc(input, defender, moveName, doubles) {
   const g = Generations.get(9);
   const a = await buildPokemon(input), d = await buildPokemon(defender);
   const res = calculate(g, a, d, new Move(g, zhToEn('moves', moveName)), new Field({ gameType: doubles ? 'Doubles' : 'Singles' }));
-  const dmg = Array.isArray(res.damage) ? res.damage : [res.damage, res.damage];
+  // ★ 多段招的 damage 是二维数组（外层=第几下）。Math.max 会 NaN，
+  //   而 flat() 会静默给你【单下】的区间（种子机关枪报成 72-86，真实 216-258）。
+  const { total, perHit, multiHit, hits } = damageRolls(res);
   const hp = d.stats.hp;
+  const pc = (x) => (x / hp * 100).toFixed(1) + '%';
   return {
     desc: res.desc(), gameType: doubles ? 'Doubles' : 'Singles', defenderHp: hp,
-    damage: [Math.min(...dmg), Math.max(...dmg)],
-    percent: [(Math.min(...dmg) / hp * 100).toFixed(1) + '%', (Math.max(...dmg) / hp * 100).toFixed(1) + '%'],
+    damage: total, percent: [pc(total[0]), pc(total[1])],
     koChance: res.kochance().text || res.kochance().chance + '%',
-    rolls: dmg,
+    ...(multiHit ? { multiHit: true, hits, perHitDamage: perHit,
+      perHitPercent: [pc(perHit[0]), pc(perHit[1])],
+      note: 'damage/percent 是 ' + hits + ' 下的合计' } : {}),
+    rolls: total,
   };
 }
 function tmpTeam(txt, tag) {
@@ -68,12 +73,16 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: {
       attacker: { type: 'string' }, defender: { type: 'string' }, move: { type: 'string' },
       doubles: { type: 'boolean', description: '双打场地（扩散招式按 0.75 倍计算），默认 false' } }, required: ['attacker', 'defender', 'move'] } },
-  { name: 'speed', description: '速度线对比（Lv50 满速基准，可加修正）',
+  { name: 'speed', description: '速度线先后手对比。p1/p2 可传物种名或整段 importable 配置文本 ——' +
+      '传配置文本时会【自动读配置里的讲究围巾/天气特性】（以前只认 scarf 开关，会答反）',
     inputSchema: { type: 'object', properties: {
       p1: { type: 'string' }, p2: { type: 'string' },
-      scarf: { type: 'array', items: { type: 'string' }, description: '围巾×1.5，取值 "p1"/"p2"' },
+      scarf: { type: 'array', items: { type: 'string' }, description: '【额外假设】它戴围巾×1.5（配置里已有围巾则不用传）' },
       tailwind: { type: 'array', items: { type: 'string' }, description: '顺风×2' },
-      para: { type: 'array', items: { type: 'string' }, description: '麻痹×0.5' } }, required: ['p1', 'p2'] } },
+      para: { type: 'array', items: { type: 'string' }, description: '麻痹×0.5' },
+      weather: { type: 'string', description: '天气：RainDance/SunnyDay/Sandstorm/Snow —— 配 Swift Swim 等特性时×2' },
+      booster: { type: 'array', items: { type: 'string' }, description: '驱动能量/古代活性提速×1.5（需自己确认它提的是速度）' } },
+      required: ['p1', 'p2'] } },
   { name: 'validate_team', description: '校验 Showdown importable 队伍是否合法。支持中文队伍文本',
     inputSchema: { type: 'object', properties: {
       team: { type: 'string' }, format: { type: 'string', description: '如 gen9ou(单打Lv100) / gen9vgc2025regi(VGC双打Lv50) / gen9championsvgc2026regmb(Champions VGC2026)，默认 gen9ou' },
@@ -128,13 +137,15 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       const mk = (inp) => /[\n:]/.test(inp) ? buildPokemon(inp)
         : new Pokemon(g, zhToEn('species', inp), { evs: { spe: 252 }, nature: 'Jolly', level: 50 });
       const a = await mk(args.p1), b = await mk(args.p2);
-      const apply = (p, tag) => {
-        let s = p.stats.spe; const notes = [];
-        if ((args.scarf || []).includes(tag)) { s = Math.floor(s * 1.5); notes.push('围巾×1.5'); }
-        if ((args.tailwind || []).includes(tag)) { s = s * 2; notes.push('顺风×2'); }
-        if ((args.para || []).includes(tag)) { s = Math.floor(s * 0.5); notes.push('麻痹×0.5'); }
-        return { species: p.name, base: p.stats.spe, effective: s, mods: notes };
-      };
+      // ★ 配置里本来就有的道具（讲究围巾）必须自己读 —— stats.spe 不含它。
+      //   以前只认 --scarf 开关，实测报出「Iron Valiant 更快」而围巾土地云其实是 463。
+      const has = (v, tag) => !!(v && v.includes(tag));
+      const apply = (p, tag) => finalSpeed(p, {
+        tailwind: has(args.tailwind, tag), para: has(args.para, tag),
+        weather: args.weather || null,
+        item: has(args.scarf, tag) ? 'Choice Scarf' : undefined,
+        booster: has(args.booster, tag),
+      });
       const A = apply(a, 'p1'), B = apply(b, 'p2');
       return text({ p1: A, p2: B, faster: A.effective > B.effective ? 'p1' : B.effective > A.effective ? 'p2' : 'tie' });
     }

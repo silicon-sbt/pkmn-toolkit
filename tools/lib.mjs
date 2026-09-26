@@ -178,6 +178,50 @@ export function loadTeam(file) {
 //
 // 想跑指定操作线时，用 opts.scripted(battle, turn) 返回 { p1?, p2? } 的招法字符串，
 // 未指定的那一方自动随机出招。双打里手动出招需自带目标，例如 'move 1 1, move 2'。
+
+// ══════════ @smogon/calc 的两个高频坑（都在实际代码里踩过） ══════════
+
+// ① 多段招的 damage 是【二维数组】—— 外层是【第几下】，内层是这一下的 16 档乱数。
+//    实测（0.12）：种子机关枪 3×16、三旋击 3×16（每下递增 20-24 / 39-46 / 57-68）、
+//    鼠数儿 10×16。总伤害 = 各下相加，desc 里也印证（三旋击 116-138 = 三下之和）。
+//
+//    ⚠️ 直接 Math.max(...res.damage) 会得到 NaN。
+//    ⚠️ 更隐蔽的是 d.flat() —— 它【不报错但语义错】：给你的是【单下】的区间，
+//       不是总伤害。种子机关枪会被报成 72-86 而真实是 216-258（差 3 倍）。
+//    所以这个函数返回【两个】区间，用的人自己选，别猜。
+export function damageRolls(res) {
+  const d = res && res.damage !== undefined ? res.damage : res;
+  if (!Array.isArray(d)) return { perHit: [d, d], total: [d, d], multiHit: false, hits: 1, groups: null };
+  if (!Array.isArray(d[0])) return { perHit: [Math.min(...d), Math.max(...d)],
+    total: [Math.min(...d), Math.max(...d)], multiHit: false, hits: 1, groups: null };
+  const groups = d.map(g => [Math.min(...g), Math.max(...g)]);
+  const total = [groups.reduce((s, g) => s + g[0], 0), groups.reduce((s, g) => s + g[1], 0)];
+  const perHit = [Math.min(...groups.map(g => g[0])), Math.max(...groups.map(g => g[1]))];
+  return { perHit, total, multiHit: true, hits: d.length, groups };
+}
+
+// ② 最终速度：Pokemon.stats.spe 【不含】道具 / 特性 / 能力等级 / 异常状态。
+//    实测（0.12，本项目自己跑过）：讲究围巾、速度 +2、麻痹 —— 三者都不改变 stats.spe。
+//    0.12 也【没有导出 getFinalSpeed】（那是后面版本才有的）。
+//    所以这里自己补。踩过的坑：队文件里明明写着 @ Choice Scarf，工具却按 309 报，
+//    还回一句「Iron Valiant 更快」—— 而围巾土地云是 463，它更快。数字就在手里却没用。
+//
+//    另注：驱动能量/夸克充能、古代活性 属于【特性+道具】联动，这里只能靠 opts.booster 显式打开。
+const SPEED_STAGE = (n) => (n >= 0 ? (2 + n) / 2 : 2 / (2 - n));
+const WEATHER_ABILITY = { RainDance: 'Swift Swim', SunnyDay: 'Chlorophyll', Sandstorm: 'Sand Rush', Snow: 'Slush Rush' };
+export function finalSpeed(pokemon, opts = {}) {
+  let v = pokemon.stats.spe;
+  const notes = [];
+  const stage = Math.max(-6, Math.min(6, opts.boost || 0));
+  if (stage) { v = Math.floor(v * SPEED_STAGE(stage)); notes.push('能力等级 ' + (stage > 0 ? '+' : '') + stage); }
+  if ((opts.item || pokemon.item) === 'Choice Scarf') { v = Math.floor(v * 1.5); notes.push('讲究围巾×1.5'); }
+  if (opts.tailwind) { v *= 2; notes.push('顺风×2'); }
+  if (opts.para) { v = Math.floor(v * 0.5); notes.push('麻痹×0.5'); }
+  const wa = WEATHER_ABILITY[opts.weather];
+  if (wa && (opts.ability || pokemon.ability) === wa) { v *= 2; notes.push(opts.weather + ' + ' + wa + '×2'); }
+  if (opts.booster) { v = Math.floor(v * 1.5); notes.push('充能提速×1.5'); }
+  return { species: pokemon.name, base: pokemon.stats.spe, effective: v, mods: notes };
+}
 export async function runBattle(sim, p1team, p2team, formatid, seed, opts = {}) {
   const { Battle, Teams } = sim;
   const b = new Battle({ formatid, seed });
